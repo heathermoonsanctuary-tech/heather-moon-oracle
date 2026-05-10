@@ -354,15 +354,11 @@
 
   /* ── Email capture form ────────────────────────────────────────────── */
   .email-capture{
-    max-width:560px;margin:32px auto 0;
+    max-width:560px;margin:32px auto;
     background:linear-gradient(160deg,rgba(45,27,105,.45),rgba(7,4,26,.5));
     border:1px solid rgba(244,185,66,.4);border-radius:12px;
     padding:28px 24px;text-align:center;
-    opacity:0;transform:translateY(14px);
-    transition:opacity .7s ease,transform .7s ease;
-    pointer-events:none;
   }
-  .email-capture.visible{opacity:1;transform:translateY(0);pointer-events:auto;}
   .email-capture-title{
     font-family:'Cormorant Garamond',serif;font-style:italic;
     font-size:1.4rem;color:var(--gold);margin-bottom:8px;
@@ -494,20 +490,21 @@
     <div class="reading-title">Your Reading</div>
     <div class="reading-sub">HMS · Energy · Spread</div>
     <div id="interpretations"></div>
+
+    <div class="email-capture" id="emailCapture">
+      <div class="email-capture-title">send this reading to your inbox ☽</div>
+      <div class="email-capture-sub">receive your spread by email + join the weekly Heather Moon Sanctuary newsletter. a deeper personalized interpretation may follow.</div>
+      <form class="email-form" id="emailForm" onsubmit="return false;">
+        <input class="email-input" id="emailInput" type="email" placeholder="your email address" autocomplete="email" required />
+        <button class="email-submit" id="emailSubmit" type="submit">send my reading</button>
+      </form>
+      <div class="email-success" id="emailSuccess">✦ on its way, love. the cape fits. ✦</div>
+      <div class="email-error" id="emailError">something went sideways. please try again.</div>
+      <div class="email-fine-print">by submitting you agree to receive the weekly HMS newsletter. unsubscribe anytime.</div>
+    </div>
+
     <div class="closer">the cape fits.</div>
   </section>
-
-  <div class="email-capture" id="emailCapture">
-    <div class="email-capture-title">send this reading to your inbox ☽</div>
-    <div class="email-capture-sub">receive your spread by email + join the weekly Heather Moon Sanctuary newsletter. a deeper personalized interpretation may follow.</div>
-    <form class="email-form" id="emailForm" onsubmit="return false;">
-      <input class="email-input" id="emailInput" type="email" placeholder="your email address" autocomplete="email" required />
-      <button class="email-submit" id="emailSubmit" type="submit">send my reading</button>
-    </form>
-    <div class="email-success" id="emailSuccess">✦ on its way, love. the cape fits. ✦</div>
-    <div class="email-error" id="emailError">something went sideways. please try again.</div>
-    <div class="email-fine-print">by submitting you agree to receive the weekly HMS newsletter. unsubscribe anytime.</div>
-  </div>
 
   <div class="actions">
     <button class="btn" id="resetBtn" disabled>↺ Pull Again</button>
