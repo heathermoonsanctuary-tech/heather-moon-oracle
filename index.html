@@ -1,440 +1,1472 @@
-// netlify/functions/send-reading.js
-// ─────────────────────────────────────────────────────────────────────────────
-// Heather Moon Oracle — Reading Email + Newsletter Subscription Handler
-// Triggered when a user submits their email after completing a 5-card spread.
-//
-// Requires these env vars (set in Netlify dashboard → Site settings → Env vars):
-//   RESEND_API_KEY        — from resend.com
-//   RESEND_FROM_EMAIL     — e.g. reading@heathermoonsanctuary.com (verified domain)
-//   ADMIN_EMAIL           — your email address for admin notifications
-//   CONVERTKIT_API_KEY    — from kit.com (formerly ConvertKit) API settings
-//   CONVERTKIT_FORM_ID    — the form ID from your Kit subscriber form
-// ─────────────────────────────────────────────────────────────────────────────
-
-const https = require('https');
-
-// ── Entry point ───────────────────────────────────────────────────────────────
-exports.handler = async (event) => {
-  // CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Heather Moon Oracle · HMS Energy Spread</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep:    #07041a;
+    --bg-mid:     #1a0b3d;
+    --pink:       #ff6b9d;
+    --pink-soft:  #ffb3d1;
+    --orange:     #ff8c42;
+    --orange-ink: #d4581c;
+    --orange-deep:#a8410f;
+    --gold:       #f4b942;
+    --cream:      #fdf2dc;
+    --paper:      #fbf0d6;
+    --paper-edge: #e8d4a8;
+    --shadow:     rgba(0,0,0,.55);
+    /* HMS Energy colors */
+    --e-wanderer:        #d4af37;
+    --e-lightbeing:      #f9b8d4;
+    --e-demonslayer:     #c9526a;
+    --e-sovereignempath: #9b74c4;
+    --e-baddie:          #ff8c42;
+  }
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  html, body { min-height:100%; overflow-x:hidden; }
+  body {
+    font-family:'Cormorant Garamond',serif;
+    color:var(--cream); min-height:100vh;
+    position:relative; padding:28px 16px 80px;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%,   rgba(255,107,157,.32),transparent 65%),
+      radial-gradient(ellipse 60% 50% at 18% 75%,  rgba(255,140,66,.22), transparent 65%),
+      radial-gradient(ellipse 70% 60% at 88% 70%,  rgba(184,59,134,.30), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 50% 100%, rgba(244,185,66,.15), transparent 60%),
+      linear-gradient(180deg,var(--bg-deep) 0%,var(--bg-mid) 55%,var(--bg-deep) 100%);
   }
 
-  if (event.httpMethod !== 'POST') {
-    return respond(405, { error: 'Method not allowed' });
+  /* ── Starfield ─────────────────────────────────────────── */
+  .stars,.stars-2,.stars-3{position:fixed;inset:0;pointer-events:none;z-index:0;}
+  .stars{background-image:
+    radial-gradient(1px 1px at 12% 18%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 28% 62%,#fff,transparent 50%),
+    radial-gradient(1.5px 1.5px at 47% 9%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 65% 38%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 82% 71%,#fff,transparent 50%),
+    radial-gradient(1.2px 1.2px at 91% 22%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 7% 84%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 36% 91%,#fff,transparent 50%),
+    radial-gradient(1.5px 1.5px at 55% 78%,#fff,transparent 50%),
+    radial-gradient(1px 1px at 73% 12%,#fff,transparent 50%);
+    opacity:.85;animation:twinkle 6s ease-in-out infinite;}
+  .stars-2{background-image:
+    radial-gradient(1.2px 1.2px at 22% 34%,var(--pink-soft),transparent 50%),
+    radial-gradient(1px 1px at 78% 50%,var(--pink-soft),transparent 50%),
+    radial-gradient(1.2px 1.2px at 44% 24%,var(--pink-soft),transparent 50%),
+    radial-gradient(1px 1px at 60% 88%,var(--pink-soft),transparent 50%);
+    opacity:.55;animation:twinkle 4s ease-in-out infinite alternate;}
+  .stars-3{background-image:
+    radial-gradient(1.5px 1.5px at 33% 45%,var(--orange),transparent 50%),
+    radial-gradient(1.2px 1.2px at 67% 22%,var(--gold),transparent 50%),
+    radial-gradient(1px 1px at 15% 55%,var(--orange),transparent 50%);
+    opacity:.65;animation:twinkle 5s ease-in-out infinite;}
+  @keyframes twinkle{0%,100%{opacity:.4;}50%{opacity:.95;}}
+
+  /* ── Layout ────────────────────────────────────────────── */
+  .stage{position:relative;z-index:1;max-width:1100px;margin:0 auto;text-align:center;}
+
+  /* ── Header ────────────────────────────────────────────── */
+  .ornament{color:var(--pink);letter-spacing:.8em;font-size:.8rem;margin-bottom:12px;text-indent:.8em;}
+  h1{
+    font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;
+    font-size:clamp(2rem,6.2vw,3.4rem);letter-spacing:.04em;line-height:1.1;
+    background:linear-gradient(135deg,var(--pink) 0%,var(--orange) 50%,var(--gold) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 40px rgba(255,107,157,.25);
+  }
+  .spread-name{
+    font-family:'Cinzel',serif;font-size:clamp(.75rem,2vw,1rem);
+    letter-spacing:.35em;color:var(--gold);margin-top:10px;text-transform:uppercase;
+  }
+  .tagline{
+    margin-top:10px;font-family:'Caveat',cursive;font-weight:600;
+    font-size:clamp(1rem,2.4vw,1.4rem);color:var(--orange);
+  }
+  .subtitle{
+    margin:12px auto 0;font-style:italic;
+    font-size:clamp(.9rem,2vw,1.05rem);color:rgba(253,242,220,.72);max-width:560px;
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(event.body);
-  } catch {
-    return respond(400, { error: 'Invalid JSON' });
+  /* Energy key pills */
+  .energy-key{
+    display:flex;flex-wrap:wrap;justify-content:center;
+    gap:8px;margin:18px auto 0;max-width:600px;
+  }
+  .key-pill{
+    font-family:'Cinzel',serif;font-size:.58rem;letter-spacing:.25em;
+    padding:4px 10px;border-radius:20px;border:1px solid currentColor;
+    text-transform:uppercase;opacity:.85;
+  }
+  .key-pill.wanderer       {color:var(--e-wanderer);}
+  .key-pill.lightbeing     {color:var(--e-lightbeing);}
+  .key-pill.demonslayer    {color:var(--e-demonslayer);}
+  .key-pill.sovereignempath{color:var(--e-sovereignempath);}
+  .key-pill.baddie         {color:var(--e-baddie);}
+
+  .divider{
+    width:200px;height:1px;margin:20px auto 0;
+    background:linear-gradient(90deg,transparent,var(--pink),var(--orange),var(--pink),transparent);
+    position:relative;
+  }
+  .divider::after{
+    content:'☽';position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%);color:var(--pink);
+    background:var(--bg-deep);padding:0 12px;font-size:14px;
   }
 
-  const { email, cards, timestamp } = payload;
-
-  // Basic validation
-  if (!email || !isValidEmail(email)) {
-    return respond(400, { error: 'Valid email required' });
+  /* ── Counter ───────────────────────────────────────────── */
+  .counter{
+    font-family:'Cinzel',serif;font-size:.8rem;
+    letter-spacing:.35em;color:var(--pink);
+    margin:22px 0 6px;min-height:1.2em;
   }
-  if (!cards || !Array.isArray(cards) || cards.length === 0) {
-    return respond(400, { error: 'Card data required' });
+  .counter .num{color:var(--orange);}
+
+  /* ── Slots ─────────────────────────────────────────────── */
+  .slots{
+    display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;
+    gap:40px 10px;margin:20px auto 0;
+    max-width:760px;padding:0 4px 36px;
+  }
+  .slot{
+    flex:0 0 100px;
+    height:160px;
+    border:1px dashed rgba(255,107,157,.4);border-radius:10px;
+    background:rgba(255,255,255,.02);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+    transition:border-color .4s ease,background .4s ease;
+  }
+  .slot.filled{border-color:transparent;background:transparent;}
+  .slot-label{
+    font-family:'Cinzel',serif;letter-spacing:.18em;font-size:.56rem;
+    color:var(--pink);opacity:.85;
+    position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);
+    white-space:nowrap;line-height:1.3;text-align:center;
+    width:120px;
+  }
+  /* Energy-specific label colors */
+  .slot[data-pos="0"] .slot-label{color:var(--e-wanderer);}
+  .slot[data-pos="1"] .slot-label{color:var(--e-lightbeing);}
+  .slot[data-pos="2"] .slot-label{color:var(--e-demonslayer);}
+  .slot[data-pos="3"] .slot-label{color:var(--e-sovereignempath);}
+  .slot[data-pos="4"] .slot-label{color:var(--e-baddie);}
+  .slot[data-pos="0"]{border-color:rgba(212,175,55,.35);}
+  .slot[data-pos="1"]{border-color:rgba(249,184,212,.35);}
+  .slot[data-pos="2"]{border-color:rgba(201,82,106,.35);}
+  .slot[data-pos="3"]{border-color:rgba(155,116,196,.35);}
+  .slot[data-pos="4"]{border-color:rgba(255,140,66,.35);}
+  .slot-sym{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    color:rgba(255,107,157,.3);font-size:1.4rem;
+  }
+  .slot.filled .slot-sym{display:none;}
+
+  /* ── Card ──────────────────────────────────────────────── */
+  .card{width:100%;height:100%;perspective:1200px;cursor:pointer;}
+  .card-inner{
+    position:relative;width:100%;height:100%;
+    transition:transform .9s cubic-bezier(.45,.05,.25,1);
+    transform-style:preserve-3d;
+  }
+  .card.flipped .card-inner{transform:rotateY(180deg);}
+  .card-face{
+    position:absolute;inset:0;border-radius:10px;
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    overflow:hidden;box-shadow:0 14px 30px var(--shadow);
   }
 
-  const ts = timestamp || new Date().toISOString();
-  const errors = [];
+  /* Card BACK */
+  .card-back{
+    background:
+      radial-gradient(circle at 50% 35%,rgba(255,107,157,.32),transparent 55%),
+      radial-gradient(circle at 50% 75%,rgba(255,140,66,.22),transparent 55%),
+      linear-gradient(160deg,#4a1769 0%,#2a0a45 60%,#15052a 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    box-shadow:0 14px 30px var(--shadow),0 0 0 1px rgba(255,107,157,.4) inset;
+  }
+  .card-back::before{content:'';position:absolute;inset:7px;border:1px solid var(--pink);border-radius:6px;opacity:.55;}
+  .card-back::after{content:'';position:absolute;inset:13px;border:1px solid var(--orange);border-radius:4px;opacity:.35;}
+  .card-back .moon-mark{
+    font-size:clamp(2rem,8vw,3rem);color:var(--pink-soft);
+    text-shadow:0 0 18px rgba(255,107,157,.7),0 0 40px rgba(255,140,66,.4);line-height:1;
+  }
+  .card-back .hmo{font-family:'Cinzel',serif;font-size:.5rem;letter-spacing:.45em;color:var(--orange);margin-top:8px;text-indent:.45em;}
+  .card-back .eleven{font-family:'Cormorant Garamond',serif;font-style:italic;color:var(--gold);font-size:.75rem;margin-top:4px;opacity:.7;}
 
-  // ── 1. Send user email ──────────────────────────────────────────────────────
-  try {
-    await sendEmail({
-      to:      email,
-      from:    `Heather Moon Sanctuary <${process.env.RESEND_FROM_EMAIL}>`,
-      subject: 'your reading is here, love ☽',
-      html:    buildUserEmail(email, cards, ts)
-    });
-  } catch (err) {
-    console.error('User email failed:', err.message);
-    errors.push('user_email');
+  /* Card FRONT */
+  .card-front{
+    transform:rotateY(180deg);
+    background:linear-gradient(180deg,var(--paper) 0%,#f6e4bc 100%);
+    color:var(--orange-ink);padding:8px 7px 6px;
+    display:flex;flex-direction:column;
+    box-shadow:0 14px 30px var(--shadow),0 0 0 1px var(--paper-edge) inset;
+  }
+  .card-front::before{content:'';position:absolute;inset:6px;border:1px solid var(--orange-ink);border-radius:5px;opacity:.3;pointer-events:none;}
+  .card-front .top{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:4px 4px 0;font-family:'Cinzel',serif;
+    font-size:.48rem;letter-spacing:.18em;color:var(--orange-deep);opacity:.7;
+  }
+  .card-front .num{font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:.9rem;color:var(--orange-ink);}
+  .card-front .body{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    padding:4px;font-family:'Caveat',cursive;font-weight:600;
+    color:var(--orange-ink);font-size:clamp(.65rem,2vw,.85rem);
+    line-height:1.16;text-align:center;word-break:break-word;hyphens:auto;
+  }
+  .card-front .attr{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:.46rem;color:var(--orange-deep);opacity:.7;
+    text-align:center;padding:2px 4px 4px;line-height:1.2;min-height:.8rem;
   }
 
-  // ── 2. Send admin notification ──────────────────────────────────────────────
-  try {
-    const dateStr = new Date(ts).toLocaleDateString('en-US', {
-      timeZone: 'America/Denver', month: 'short', day: 'numeric', year: 'numeric'
-    });
-    await sendEmail({
-      to:      process.env.ADMIN_EMAIL,
-      from:    `HMO Readings <${process.env.RESEND_FROM_EMAIL}>`,
-      subject: `[HMO Reading] ${email} — ${dateStr}`,
-      html:    buildAdminEmail(email, cards, ts)
-    });
-  } catch (err) {
-    console.error('Admin email failed:', err.message);
-    errors.push('admin_email');
+  /* Hover lift */
+  .deck .card:hover .card-inner,.deck .card:focus-visible .card-inner{transform:translateY(-16px)!important;}
+  .deck .card:hover .card-back,.deck .card:focus-visible .card-back{
+    box-shadow:0 22px 44px var(--shadow),0 0 0 1px var(--pink) inset,0 0 32px rgba(255,107,157,.45);
   }
 
-  // ── 3. Subscribe to Kit (ConvertKit) newsletter ─────────────────────────────
-  try {
-    await subscribeToKit(email);
-  } catch (err) {
-    console.error('Kit subscribe failed:', err.message);
-    errors.push('newsletter');
+  /* ── Fanned deck ───────────────────────────────────────── */
+  .deck-wrap{position:relative;height:340px;margin-top:72px;transition:opacity .6s ease,transform .6s ease;}
+  .deck-wrap.hidden{opacity:0;pointer-events:none;transform:translateY(20px);}
+  .deck{position:relative;width:100%;height:100%;}
+  .deck .card{
+    position:absolute;width:100px;height:160px;
+    top:30px;left:50%;margin-left:-50px;
+    transform-origin:50% 110%;
+    transition:transform .5s cubic-bezier(.2,.8,.3,1),opacity .5s ease;
+  }
+  .deck .card.taken{opacity:0;pointer-events:none;transform:translateY(-40px) scale(.9);}
+  @media(min-width:640px){
+    .deck .card{width:118px;height:188px;margin-left:-59px;}
+    .deck-wrap{height:400px;}
   }
 
-  // Return success even if non-critical steps failed
-  return {
-    statusCode: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      success: true,
-      warnings: errors.length > 0 ? errors : undefined
-    })
-  };
-};
+  /* ── Reading panel ─────────────────────────────────────── */
+  .reading{
+    margin:64px auto 0;max-width:780px;text-align:left;
+    opacity:0;transform:translateY(20px);
+    transition:opacity .8s ease,transform .8s ease;pointer-events:none;
+  }
+  .reading.visible{opacity:1;transform:translateY(0);pointer-events:auto;}
+  .reading-title{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    text-align:center;font-size:1.5rem;color:var(--pink);margin-bottom:4px;
+  }
+  .reading-sub{
+    text-align:center;font-style:italic;color:rgba(253,242,220,.6);
+    margin-bottom:28px;font-size:.85rem;letter-spacing:.3em;
+    font-family:'Cinzel',serif;
+  }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function respond(status, body) {
-  return {
-    statusCode: status,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  };
+  /* Individual interpretation blocks */
+  .interp{
+    background:linear-gradient(160deg,rgba(45,27,105,.25),rgba(7,4,26,.45));
+    border:1px solid rgba(255,107,157,.2);border-radius:12px;
+    padding:20px 22px 22px 26px;margin:14px 0;
+    position:relative;opacity:0;transform:translateY(14px);
+    animation:fadeInUp .7s ease forwards;
+    border-left:3px solid var(--pink);
+  }
+  .interp:nth-child(1){animation-delay:.1s;border-left-color:var(--e-wanderer);}
+  .interp:nth-child(2){animation-delay:.3s;border-left-color:var(--e-lightbeing);}
+  .interp:nth-child(3){animation-delay:.5s;border-left-color:var(--e-demonslayer);}
+  .interp:nth-child(4){animation-delay:.7s;border-left-color:var(--e-sovereignempath);}
+  .interp:nth-child(5){animation-delay:.9s;border-left-color:var(--e-baddie);}
+  @keyframes fadeInUp{to{opacity:1;transform:translateY(0);}}
+
+  .interp .energy-label{
+    font-family:'Cinzel',serif;letter-spacing:.3em;font-size:.7rem;
+    text-transform:uppercase;
+  }
+  .interp:nth-child(1) .energy-label{color:var(--e-wanderer);}
+  .interp:nth-child(2) .energy-label{color:var(--e-lightbeing);}
+  .interp:nth-child(3) .energy-label{color:var(--e-demonslayer);}
+  .interp:nth-child(4) .energy-label{color:var(--e-sovereignempath);}
+  .interp:nth-child(5) .energy-label{color:var(--e-baddie);}
+
+  .interp .meta{
+    font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.22em;
+    color:rgba(253,242,220,.55);margin-top:4px;
+  }
+  .interp .card-text{
+    font-family:'Caveat',cursive;font-weight:600;color:var(--cream);
+    font-size:1.45rem;line-height:1.28;margin:12px 0 8px;
+  }
+  .interp .attr-line{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    color:var(--gold);opacity:.8;font-size:.95rem;margin-bottom:10px;
+  }
+  .interp .pos-interp{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    color:rgba(253,242,220,.82);font-size:1.05rem;line-height:1.55;
+    border-top:1px solid rgba(255,255,255,.08);padding-top:10px;margin-top:2px;
+  }
+
+  /* Closer */
+  .closer{
+    text-align:center;margin-top:32px;
+    font-family:'Caveat',cursive;font-weight:700;font-size:1.6rem;
+    background:linear-gradient(135deg,var(--pink),var(--orange));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    opacity:0;animation:fadeInUp .7s ease forwards;animation-delay:1.2s;
+  }
+
+  /* Buttons */
+  .actions{margin-top:40px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap;}
+  .btn{
+    font-family:'Cinzel',serif;font-size:.8rem;letter-spacing:.25em;text-transform:uppercase;
+    color:var(--cream);background:transparent;border:1px solid var(--pink);
+    padding:13px 28px;cursor:pointer;border-radius:2px;transition:all .3s ease;
+  }
+  .btn:hover{
+    background:linear-gradient(135deg,var(--pink),var(--orange));
+    color:var(--bg-deep);border-color:transparent;
+    box-shadow:0 0 24px rgba(255,107,157,.45);
+  }
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .btn:disabled:hover{background:transparent;color:var(--cream);border-color:var(--pink);box-shadow:none;}
+
+  footer{
+    text-align:center;margin-top:60px;color:rgba(255,107,157,.5);
+    font-size:.72rem;letter-spacing:.35em;font-family:'Cinzel',serif;
+  }
+  footer .deck-stats{
+    display:block;margin-top:8px;font-family:'Cormorant Garamond',serif;
+    font-style:italic;letter-spacing:.05em;font-size:.9rem;color:rgba(253,242,220,.38);
+  }
+  footer .copyright{
+    display:block;margin-top:10px;
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:.88rem;letter-spacing:.03em;
+    color:rgba(253,242,220,.72);
+    border-top:1px solid rgba(255,107,157,.2);
+    padding-top:10px;max-width:560px;margin-left:auto;margin-right:auto;
+  }
+
+  /* ── Email capture form ────────────────────────────────────────────── */
+  .email-capture{
+    max-width:560px;margin:32px auto 0;
+    background:linear-gradient(160deg,rgba(45,27,105,.45),rgba(7,4,26,.5));
+    border:1px solid rgba(244,185,66,.4);border-radius:12px;
+    padding:28px 24px;text-align:center;
+    opacity:0;transform:translateY(14px);
+    transition:opacity .7s ease,transform .7s ease;
+    pointer-events:none;
+  }
+  .email-capture.visible{opacity:1;transform:translateY(0);pointer-events:auto;}
+  .email-capture-title{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:1.4rem;color:var(--gold);margin-bottom:8px;
+  }
+  .email-capture-sub{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    color:rgba(253,242,220,.7);font-size:1rem;margin-bottom:20px;line-height:1.5;
+  }
+  .email-form{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .email-input{
+    flex:1;min-width:200px;max-width:320px;padding:12px 16px;
+    background:rgba(7,4,26,.6);border:1px solid rgba(212,175,55,.5);
+    border-radius:2px;color:var(--cream);
+    font-family:'Cormorant Garamond',serif;font-size:1rem;
+    outline:none;transition:border-color .3s ease;
+  }
+  .email-input:focus{border-color:var(--gold);}
+  .email-input::placeholder{color:rgba(253,242,220,.4);}
+  .email-submit{
+    font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--bg-deep);
+    background:linear-gradient(135deg,var(--pink),var(--orange));
+    border:none;padding:12px 22px;cursor:pointer;border-radius:2px;
+    transition:opacity .3s ease;white-space:nowrap;
+  }
+  .email-submit:hover{opacity:.88;}
+  .email-submit:disabled{opacity:.45;cursor:not-allowed;}
+  .email-success{
+    display:none;font-family:'Caveat',cursive;font-size:1.3rem;
+    color:var(--orange);margin-top:12px;
+  }
+  .email-error{
+    display:none;font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:.95rem;color:#c9526a;margin-top:10px;
+  }
+  .email-fine-print{
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:.8rem;color:rgba(253,242,220,.45);margin-top:12px;line-height:1.4;
+  }
+
+  /* ── Image panel (canvas preview) ─────────────────────── */
+  .img-panel{
+    position:fixed;inset:0;z-index:200;
+    background:rgba(7,4,26,.95);
+    overflow-y:auto;padding:20px 16px 40px;
+    display:flex;flex-direction:column;align-items:center;
+    opacity:0;visibility:hidden;pointer-events:none;
+    transition:opacity .3s ease,visibility .3s ease;
+  }
+  .img-panel.open{opacity:1;visibility:visible;pointer-events:auto;}
+  .img-panel-bar{
+    width:100%;max-width:1080px;
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:14px;gap:12px;flex-wrap:wrap;
+  }
+  .img-panel-hint{
+    font-family:'Caveat',cursive;font-size:1.1rem;color:var(--cream);opacity:.8;
+  }
+  .img-panel-close{
+    font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.25em;
+    color:var(--pink);background:transparent;border:1px solid var(--pink);
+    padding:7px 16px;cursor:pointer;border-radius:2px;
+    transition:all .25s ease;flex-shrink:0;
+  }
+  .img-panel-close:hover{background:var(--pink);color:var(--bg-deep);}
+  .img-panel img{width:100%;max-width:1080px;border-radius:8px;display:block;}
+
+  /* ── Print styles ──────────────────────────────────────── */
+  @media print {
+    .stars,.stars-2,.stars-3,.img-panel{display:none!important;}
+    body{background:#fff!important;color:#1a0b3d!important;padding:8px!important;}
+    h1{background:none!important;-webkit-background-clip:unset!important;background-clip:unset!important;color:#7b3fa0!important;-webkit-text-fill-color:#7b3fa0!important;}
+    .spread-name,.tagline,.energy-key,.divider,.counter,.slots,.deck-wrap,.actions,footer{display:none!important;}
+    .reading{opacity:1!important;transform:none!important;margin:0!important;pointer-events:auto!important;}
+    .reading-title{color:#7b3fa0!important;}
+    .reading-sub{color:#555!important;letter-spacing:.15em!important;}
+    .interp{background:#f7f0ff!important;border:1px solid #ccc!important;break-inside:avoid;margin-bottom:10px!important;}
+    .interp:nth-child(1){border-left:3px solid #d4af37!important;}
+    .interp:nth-child(2){border-left:3px solid #c9526a!important;}
+    .interp:nth-child(3){border-left:3px solid #c9526a!important;}
+    .interp:nth-child(4){border-left:3px solid #9b74c4!important;}
+    .interp:nth-child(5){border-left:3px solid #ff8c42!important;}
+    .energy-label{color:#7b3fa0!important;}
+    .meta{color:#555!important;}
+    .card-text{color:#a8410f!important;}
+    .attr-line{color:#7b5c00!important;}
+    .pos-interp{color:#1a0b3d!important;border-top:1px solid #ddd!important;}
+    .closer{background:none!important;-webkit-text-fill-color:#c9526a!important;color:#c9526a!important;margin-top:16px!important;}
+  }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="stars-2"></div>
+<div class="stars-3"></div>
+
+<main class="stage">
+  <header>
+    <div class="ornament">✦ ☽ ✦</div>
+    <h1>Heather <span style="display:inline-block;margin:0 .1em">☽</span> Moon Oracle</h1>
+    <div class="spread-name">5-Card HMS Energy Spread</div>
+    <div class="tagline">spicy but sanctuary</div>
+    <p class="subtitle">Take a breath. Hold your question. Let each energy tell you what it needs you to hear.</p>
+    <div class="energy-key">
+      <span class="key-pill wanderer">Wanderer</span>
+      <span class="key-pill lightbeing">Light Being</span>
+      <span class="key-pill demonslayer">Demon Slayer</span>
+      <span class="key-pill sovereignempath">Sovereign Empath</span>
+      <span class="key-pill baddie">Baddie</span>
+    </div>
+    <div class="divider"></div>
+  </header>
+
+  <div class="counter" id="counter">CHOOSE <span class="num">5</span> CARDS</div>
+
+  <div class="slots" id="slots">
+    <div class="slot" data-pos="0"><span class="slot-sym">✦</span><span class="slot-label">Wanderer</span></div>
+    <div class="slot" data-pos="1"><span class="slot-sym">✧</span><span class="slot-label">Light Being</span></div>
+    <div class="slot" data-pos="2"><span class="slot-sym">⚔</span><span class="slot-label">Demon Slayer</span></div>
+    <div class="slot" data-pos="3"><span class="slot-sym">♡</span><span class="slot-label">Sovereign Empath</span></div>
+    <div class="slot" data-pos="4"><span class="slot-sym">♛</span><span class="slot-label">Baddie</span></div>
+  </div>
+
+  <div class="deck-wrap" id="deckWrap">
+    <div class="deck" id="deck"></div>
+  </div>
+
+  <section class="reading" id="reading" aria-live="polite">
+    <div class="reading-title">Your Reading</div>
+    <div class="reading-sub">HMS · Energy · Spread</div>
+    <div id="interpretations"></div>
+    <div class="closer">the cape fits.</div>
+  </section>
+
+  <div class="email-capture" id="emailCapture">
+    <div class="email-capture-title">send this reading to your inbox ☽</div>
+    <div class="email-capture-sub">receive your spread by email + join the weekly Heather Moon Sanctuary newsletter. a deeper personalized interpretation may follow.</div>
+    <form class="email-form" id="emailForm" onsubmit="return false;">
+      <input class="email-input" id="emailInput" type="email" placeholder="your email address" autocomplete="email" required />
+      <button class="email-submit" id="emailSubmit" type="submit">send my reading</button>
+    </form>
+    <div class="email-success" id="emailSuccess">✦ on its way, love. the cape fits. ✦</div>
+    <div class="email-error" id="emailError">something went sideways. please try again.</div>
+    <div class="email-fine-print">by submitting you agree to receive the weekly HMS newsletter. unsubscribe anytime.</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="resetBtn" disabled>↺ Pull Again</button>
+    <button class="btn" id="saveImgBtn" style="display:none;border-color:var(--gold);color:var(--gold)">⬇ Save Image</button>
+  </div>
+
+  <!-- Image preview panel -->
+  <div class="img-panel" id="imgPanel" aria-modal="true" role="dialog">
+    <div class="img-panel-bar">
+      <span class="img-panel-hint">📱 Tap &amp; hold to save · 🖥 Right-click → Save image</span>
+      <button class="img-panel-close" id="imgPanelClose">✕ Close</button>
+    </div>
+    <img id="readingImg" alt="Your Heather Moon Oracle reading" />
+  </div>
+
+  <footer>
+    ✦ ☽ ✦
+    <span class="deck-stats">Heather Moon Oracle · 79 cards · 5-card HMS energy spread</span>
+    <span class="copyright">© 2025 Heather Moon Sanctuary · Heather Green · All rights reserved</span>
+  </footer>
+</main>
+
+<script>
+/* ── HMS Energy Positions ──────────────────────────────── */
+const POSITIONS = ["Wanderer","Light Being","Demon Slayer","Sovereign Empath","Baddie"];
+const POS_KEYS  = ["wanderer","lightBeing","demonSlayer","sovereignEmpath","baddie"];
+const POS_SYMS  = ["✦","✧","⚔","♡","♛"];
+
+/* ── The Heather Moon Oracle Deck — 79 cards ──────────── */
+const DECK = [
+// ── Biofield & Body Science ──
+{num:1,cat:"Biofield & Body",text:"Electromagnetic body part BIOFIELD. Grounding, connect with nature, fresh air, oxygenation.",attr:null,
+wanderer:"The journey home is through the body. Grounding is the homecoming.",
+lightBeing:"Your luminosity grows in fresh air and bare feet. Outside is church.",
+demonSlayer:"A grounded body is a hard target. Roots are armor.",
+sovereignEmpath:"Disconnected from earth, you absorb everything. Plug in.",
+baddie:"A queen takes up space in her body. Inhabit yours like you own it."},
+
+{num:2,cat:"Biofield & Body",text:"Show me your BIOFIELD. Pilo-erection. Do biofield practice.",attr:null,
+wanderer:"The body is part of your map. Read its signals.",
+lightBeing:"The chills, the goosebumps — that's your spirit confirming. Trust them.",
+demonSlayer:"Your body knows danger before your mind does. Honor the alarm.",
+sovereignEmpath:"Practice gives you control over what you absorb. Daily.",
+baddie:"A baddie is fluent in her own body language. Get fluent."},
+
+{num:3,cat:"Biofield & Body",text:"Awaken your spine. Bodywork, energy work, chiropractor, acupuncture, massage, yoga, spinal flow.",attr:null,
+wanderer:"Stuckness in the spine is stuckness on the path. Move it.",
+lightBeing:"Energy flows upward through an open spine. Open it.",
+demonSlayer:"Compressed spine = compressed power. Decompress and rise.",
+sovereignEmpath:"Your spine carries everyone you've ever held. Unload it.",
+baddie:"Stand tall. The crown wobbles on a slumped queen."},
+
+{num:4,cat:"Biofield & Body",text:"Your biofield is on the grid — whether you signed up or not. WAKE UP. UNPLUG.",attr:"concept via Sabrina Wallace · Tore Says",
+wanderer:"Your awareness of the network is part of your mission. Document it.",
+lightBeing:"Unplug to reconnect to source. The grid is not God.",
+demonSlayer:"The first warfare is recognizing the field. You see it now.",
+sovereignEmpath:"Sovereignty includes opting out of frequencies you didn't agree to.",
+baddie:"A baddie chooses what she's plugged into. Choose."},
+
+{num:5,cat:"Biofield & Body",text:"Cyber, physical, neural, digital twin overlay.",attr:null,
+wanderer:"Stay rooted in the version of you that breathes. The avatar is not the soul.",
+lightBeing:"Your light source is internal, not algorithmic. Don't outsource.",
+demonSlayer:"The overlay can be co-opted. Yours can't be — if you stay aware.",
+sovereignEmpath:"Audit what data is being made about you. You have a say.",
+baddie:"They can't replicate your frequency. Stay original."},
+
+{num:6,cat:"Biofield & Body",text:"Energy Harvesting WBAN wirelessly connected.",attr:null,
+wanderer:"Notice where your energy goes. Some of it isn't being spent — it's being taken.",
+lightBeing:"Light requires fuel. Don't let yours leak.",
+demonSlayer:"A drain is a slow attack. Find it. Plug it.",
+sovereignEmpath:"Cord cutting includes wireless ones. Cut.",
+baddie:"Royalty doesn't tip people who don't earn it. Stop tipping with your energy."},
+
+{num:7,cat:"Biofield & Body",text:"Your nervous system needs Jesus. Also magnesium.",attr:null,
+wanderer:"The path requires regulation. Both — body and spirit.",
+lightBeing:"Calm is luminous. Build the system that keeps you calm.",
+demonSlayer:"A regulated nervous system is a sword that doesn't shake.",
+sovereignEmpath:"You absorb less when you're regulated. Get regulated.",
+baddie:"Hot girls take supplements AND pray. Both/and."},
+
+// ── Modern Threats / 5GW ──
+{num:8,cat:"5th Gen Warfare",text:"Nano tech deployed. DETOX.",attr:null,
+wanderer:"Clean the vessel for the journey. You can't carry the residue forward.",
+lightBeing:"The body holds light easier when it's not holding toxins.",
+demonSlayer:"Detox is offense, not just defense. Push the invader out.",
+sovereignEmpath:"What's been put in you without consent can also leave. Move it.",
+baddie:"A baddie's body is a temple. Clear the desecrations."},
+
+{num:9,cat:"5th Gen Warfare",text:"5th generation warfare is involved. SHIELD.",attr:null,
+wanderer:"Your awareness of the war is part of why you're here. Not coincidence.",
+lightBeing:"The shield of faith is real. Lift it.",
+demonSlayer:"This is your battlefield. Show up suited.",
+sovereignEmpath:"Your sensitivity makes you a target — and a witness. Both.",
+baddie:"Even queens armor up. Especially queens."},
+
+{num:10,cat:"5th Gen Warfare",text:"MISINFO. Diversion tactic. False Flag.",attr:null,
+wanderer:"A lie sent you down a wrong path once. You see how the trick works now.",
+lightBeing:"Truth is your alignment. Lies disrupt the signal. Notice.",
+demonSlayer:"The first move is always misdirection. Look where they don't want you looking.",
+sovereignEmpath:"Your gut catches lies before your mind does. Trust it.",
+baddie:"A baddie does her own research. Don't be told what's real."},
+
+{num:11,cat:"5th Gen Warfare",text:"Brainwashed.",attr:null,
+wanderer:"Some of what you \"knew\" was installed, not learned. Unlearning is part of the path.",
+lightBeing:"Truth raises vibration. Lies lower it. Audit your beliefs.",
+demonSlayer:"Programming is a spell. You can break spells. Break them.",
+sovereignEmpath:"You feel the cognitive dissonance because you're tuning back in.",
+baddie:"A baddie thinks for herself. Even if she has to relearn how."},
+
+// ── Scripture & Prayer ──
+{num:12,cat:"Scripture & Prayer",text:"No evil + fuckery formed against me shall prosper.",attr:null,
+wanderer:"Protection has been moving with you on the path. Whether you saw it or not.",
+lightBeing:"This is your scripture. Speak it daily.",
+demonSlayer:"This is the warrior's prayer. Memorize it.",
+sovereignEmpath:"Your boundary is divine. It's not just yours.",
+baddie:"Try them. They lose. Walk on."},
+
+{num:13,cat:"Scripture & Prayer",text:"Come, let us sing to the LORD.",attr:"Psalm 95:1",
+wanderer:"Worship has been a trail marker on your path. Sing through.",
+lightBeing:"Singing raises your vibration faster than thinking does. Open your mouth.",
+demonSlayer:"Praise is warfare. Demons flee from worship.",
+sovereignEmpath:"A song over your space clears more than smudge sometimes.",
+baddie:"A baddie sings. Off-key counts. Joy is the point."},
+
+{num:14,cat:"Scripture & Prayer",text:"Knock and it shall be opened to you.",attr:"Matthew 7:7",
+wanderer:"You stopped knocking. The door is still there. Knock again.",
+lightBeing:"Asking is alignment. The universe answers active faith.",
+demonSlayer:"Your prayers are weapons that open doors. Use them.",
+sovereignEmpath:"Stop assuming you have to figure it out alone. Ask for help.",
+baddie:"Confidence asks. Insecurity hopes. Be the asker."},
+
+{num:15,cat:"Scripture & Prayer",text:"Do not fear.",attr:"Mark 5:36",
+wanderer:"Fear has detoured you before. Don't let it again.",
+lightBeing:"Fear dims you. Choose anyway.",
+demonSlayer:"Fear is the enemy's first weapon. Refuse it.",
+sovereignEmpath:"You absorb fear from rooms. Don't carry what's not yours.",
+baddie:"Baddies are scared too. They just don't let it run them."},
+
+{num:16,cat:"Scripture & Prayer",text:"WALL it. BIND it. SEND it back. The LORD rebuke thee. AMEN.",attr:"Jude 1:9 · concept via Sabrina Wallace",
+wanderer:"This is the sequence you needed in your darkest stretch. Memorize it.",
+lightBeing:"Your light is protected by your prayer. Pray it.",
+demonSlayer:"This is a spell-breaking sequence. Use the words.",
+sovereignEmpath:"Bind. Banish. Return. The empath's defense protocol.",
+baddie:"A baddie doesn't argue with what tries to attach. She rebukes."},
+
+{num:17,cat:"Scripture & Prayer",text:"Jesus, Divine protection, guardian angels, spirit guides, ancestors.",attr:null,
+wanderer:"You've been led. You're being led. Trust the team.",
+lightBeing:"You're surrounded by light, even when you can't see it.",
+demonSlayer:"You have backup. Call it in.",
+sovereignEmpath:"You're not absorbing alone. The team helps process.",
+baddie:"A baddie has a divine entourage. Travel with yours."},
+
+{num:18,cat:"Scripture & Prayer",text:"Dance. The body prays in motion.",attr:"2 Samuel 6:14",
+wanderer:"Movement gets you unstuck. Always has.",
+lightBeing:"Joy is a worship form. Dance for the divine.",
+demonSlayer:"Demons can't stand on a dance floor. Move them off you.",
+sovereignEmpath:"Dancing alone shakes off what you've absorbed. Do it.",
+baddie:"A baddie dances when she wants to, alone or not. Press play."},
+
+// ── Spiritual Warfare & Clearing ──
+{num:19,cat:"Spiritual Warfare",text:"Evil Eye Spiritual Attacks. You have experienced spiritual warfare + defeated darkness. Return to sender.",attr:null,
+wanderer:"Things that shouldn't have happened to you happened. They were targeted.",
+lightBeing:"Your light made you visible. That's why you were attacked.",
+demonSlayer:"Return to sender is not metaphor. Mean it.",
+sovereignEmpath:"You absorb attacks because you're permeable. The shield is the practice.",
+baddie:"A baddie doesn't shrink because someone hexed her. She brightens."},
+
+{num:20,cat:"Spiritual Warfare",text:"SPACE Clearing. Feng shui, crystal grid, sage/smudge, salt, glitter, mirrors, paint, energy work, cord cutting, BANISHMENT.",attr:null,
+wanderer:"A space you lived in shaped you. Choose your spaces deliberately now.",
+lightBeing:"Light requires a clean container. Clear the room.",
+demonSlayer:"Banishment is real. Salt, sage, mirror, prayer. Use them.",
+sovereignEmpath:"Your space holds what you bring home. Clear daily.",
+baddie:"A baddie's space is curated. Energetically too."},
+
+{num:21,cat:"Spiritual Warfare",text:"Ley Lines. Earth energy, dowsing, grid work, feng shui, crystals.",attr:null,
+wanderer:"The land you're called to has frequency. Listen for it.",
+lightBeing:"Earth frequency tunes your light. Lay on the ground.",
+demonSlayer:"Some places fight you. Others fortify you. Know which is which.",
+sovereignEmpath:"You're sensitive to land energy. Honor it as data.",
+baddie:"A baddie chooses her territory. Choose where you stand."},
+
+{num:22,cat:"Spiritual Warfare",text:"Spirit guides, entities, exorcism, earth energy.",attr:null,
+wanderer:"Some of what walks with you is helpful. Some isn't. Discern.",
+lightBeing:"Light beings respond to invitation. Invite.",
+demonSlayer:"Not all entities are friendly. Some need eviction.",
+sovereignEmpath:"You've felt presences. Trust the perception. Then act.",
+baddie:"A baddie has authority over her own field. Exercise it."},
+
+{num:23,cat:"Spiritual Warfare",text:"Monitoring spirit sent to track you. Bind it. Return it.",attr:null,
+wanderer:"Someone's been watching the path. Cut the surveillance.",
+lightBeing:"Your light needs privacy too. Not everything is for public viewing.",
+demonSlayer:"Recognize a tail when you have one. Bind it.",
+sovereignEmpath:"That heaviness you've been carrying isn't yours. Send it back.",
+baddie:"A baddie doesn't let people watch her without permission. Energetic version included."},
+
+{num:24,cat:"Spiritual Warfare",text:"They wanted your downfall so bad it became their own.",attr:null,
+wanderer:"A trap closed on the trapper. Witness it without gloating.",
+lightBeing:"Light burns its own path through. Destruction can't follow you.",
+demonSlayer:"The enemy fell on its own sword. You didn't have to swing.",
+sovereignEmpath:"You don't have to do anything. Step back.",
+baddie:"A baddie watches her enemies eat themselves. From a distance."},
+
+// ── Identity & Power ──
+{num:25,cat:"Identity & Power",text:"They can fuck right off!!",attr:"Heather Moon",
+wanderer:"This is the boundary that cleared the path. Don't apologize for it.",
+lightBeing:"Your luminosity requires gatekeeping. Gatekeep.",
+demonSlayer:"Some things don't need to be processed. They need to be banished.",
+sovereignEmpath:"A sovereign empath says no. Often. With chest.",
+baddie:"Main character energy doesn't audition for side characters. Cast accordingly."},
+
+{num:26,cat:"Identity & Power",text:"Your powers are a gift and a curse.",attr:null,
+wanderer:"Your sensitivity made the path harder and more meaningful.",
+lightBeing:"The light that makes you radiant also makes you raw.",
+demonSlayer:"The thing you fight is also the thing you're armed with.",
+sovereignEmpath:"Empath gifts hurt before they help. Both are real.",
+baddie:"Baddies have a price for their power. Pay it gladly."},
+
+{num:27,cat:"Identity & Power",text:"You are rewriting timelines with your intention.",attr:null,
+wanderer:"The path you're on now isn't the only one. You shifted it.",
+lightBeing:"Your light bends reality. Aim it.",
+demonSlayer:"Intention defeats fate. Use yours like a weapon.",
+sovereignEmpath:"Your energy authors. Stop subletting your timeline.",
+baddie:"A baddie writes her own story. Pick up the pen."},
+
+{num:28,cat:"Identity & Power",text:"You are a creator — God's creation. Made in the Creator's image.",attr:null,
+wanderer:"The path is creation. You're meant to build, not just travel.",
+lightBeing:"You inherited the light. Reflect it.",
+demonSlayer:"Made in the image means you have authority. Use it.",
+sovereignEmpath:"You create what you allow into your field. Curate.",
+baddie:"A baddie is a mirror of the divine. Stand like you know it."},
+
+{num:29,cat:"Identity & Power",text:"Speak your TRUTH. Share your VOICE. Authenticity MAGNET.",attr:null,
+wanderer:"Your voice is the trail you leave. People follow the realness.",
+lightBeing:"Truth-telling raises everyone's frequency, including yours.",
+demonSlayer:"Lies are demonic. Tell the truth as warfare.",
+sovereignEmpath:"Saying what you mean stops the absorption. Speak.",
+baddie:"Baddies don't whisper. Volume up."},
+
+{num:30,cat:"Identity & Power",text:"You are a mental gladiator.",attr:null,
+wanderer:"You've fought through things people don't know about. The path made you sharp.",
+lightBeing:"Resilience is luminous. Yours is rare.",
+demonSlayer:"This is who you are. Stop apologizing for the steel.",
+sovereignEmpath:"Empath + warrior = unmatched. Both are you.",
+baddie:"A baddie is hard AND soft. Don't choose. Be both."},
+
+// ── Relational / Partnership ──
+{num:31,cat:"Relational",text:"Union of souls. Not everyone is meant to be in yours.",attr:null,
+wanderer:"People walked partway. Some left. Some shouldn't have started.",
+lightBeing:"Soul-aligned people raise your light. Audit who's in.",
+demonSlayer:"Some souls drain you on contact. Cut.",
+sovereignEmpath:"Sovereignty is selective. Be selective.",
+baddie:"A baddie's circle is small and chosen. Yours should be too."},
+
+{num:32,cat:"Relational",text:"Love bombed and devoured. You saw it for what it was.",attr:null,
+wanderer:"A detour by someone's false love. You found the path again.",
+lightBeing:"True love grows. Counterfeit love consumes.",
+demonSlayer:"Recognize the predator pattern. Name it. Cut it.",
+sovereignEmpath:"Your discernment is sacred. Don't override it for nice words.",
+baddie:"A baddie isn't impressed by love bombs. She's impressed by consistency."},
+
+{num:33,cat:"Relational",text:"Third party energy. Receipts coming soon.",attr:null,
+wanderer:"Someone interfered in your story. The truth is coming.",
+lightBeing:"Sit with peace. The reveal is divinely timed.",
+demonSlayer:"A third party is always a weakness in the structure. It will fall.",
+sovereignEmpath:"You sensed it before there was proof. You were right.",
+baddie:"A baddie waits for receipts. She doesn't beg for them."},
+
+{num:34,cat:"Relational",text:"Love will always embrace you.",attr:"Aura — Change",
+wanderer:"Love has tracked you through every chapter. It hasn't lost you.",
+lightBeing:"You are inside love right now. Even when you can't feel it.",
+demonSlayer:"Love is an armor demons can't crack. Wear it.",
+sovereignEmpath:"You can receive without absorbing. Practice the difference.",
+baddie:"A baddie is loved. Period. Internalize it."},
+
+{num:35,cat:"Relational",text:"Soul tie cord cutting. BANISHMENT.",attr:null,
+wanderer:"A tether kept you tied to old terrain. Cut it. Move.",
+lightBeing:"A soul tie dims you. Cut it back to luminous.",
+demonSlayer:"Banishment is a divine right. Exercise it.",
+sovereignEmpath:"An empath without cord-cutting practice is hemorrhaging. Practice.",
+baddie:"A baddie doesn't share a soul. She owns hers fully."},
+
+{num:36,cat:"Relational",text:"They gotta heal before they can love you right. Not your job.",attr:null,
+wanderer:"You tried to heal someone on your path. They were never your assignment.",
+lightBeing:"You can love at a distance. Distance is sometimes the love.",
+demonSlayer:"Stop fighting their demons for them. Yours need attention.",
+sovereignEmpath:"Their healing isn't your absorption project. Step back.",
+baddie:"A baddie doesn't shrink to make room for someone's wound. Walk."},
+
+// ── Shadow Side & Discernment ──
+{num:37,cat:"Shadow & Discernment",text:"You are a human lie detector.",attr:null,
+wanderer:"Your gift has saved your path from worse turns.",
+lightBeing:"Truth-tuned beings detect distortion. You do.",
+demonSlayer:"A lie detector is a weapon. Yours is built-in.",
+sovereignEmpath:"Your detection IS your boundary. Listen to it.",
+baddie:"A baddie clocks the bullshit. Then she walks."},
+
+{num:38,cat:"Shadow & Discernment",text:"Even your noble shit has ego underneath. The savior costume gets people killed. Take it off.",attr:"concept via Tore Says",
+wanderer:"A martyr-detour cost you time. Don't take it again.",
+lightBeing:"Real light doesn't need an audience. Check your motive.",
+demonSlayer:"The savior costume is ego with a halo. Take it off.",
+sovereignEmpath:"Self-sacrifice is empath ego. Don't dress it up as love.",
+baddie:"A baddie doesn't bleed for applause. She doesn't bleed unnecessarily."},
+
+{num:39,cat:"Shadow & Discernment",text:"Stop Talking.",attr:null,
+wanderer:"Words you didn't need to say sent you backwards. Lesson learned.",
+lightBeing:"Silence is luminous. Some things shouldn't be discussed.",
+demonSlayer:"You're handing the enemy ammo every time you over-explain. Stop.",
+sovereignEmpath:"Silence is sovereignty. Use it.",
+baddie:"A baddie doesn't explain. She doesn't justify. She doesn't perform."},
+
+{num:40,cat:"Shadow & Discernment",text:"Dominos Butterfly Effect.",attr:null,
+wanderer:"Small choices on your path are still echoing. Honor them.",
+lightBeing:"A small kind act has bigger reach than you know. Keep doing them.",
+demonSlayer:"A small attack escalates. Cut it early.",
+sovereignEmpath:"One absorbed mood becomes a week of off-ness. Block early.",
+baddie:"A baddie's small moves are intentional. Keep being intentional."},
+
+{num:41,cat:"Shadow & Discernment",text:"Gaslight, gatekeep, girlboss — but make it demonic.",attr:null,
+wanderer:"Some women on your path have weaponized femininity. Recognize them.",
+lightBeing:"Performative spirituality is demonic in pretty packaging. See it.",
+demonSlayer:"This is a tactic. Not confusion. A tactic. Counter it.",
+sovereignEmpath:"A faux-empath drains harder than an obvious one. Cut.",
+baddie:"A baddie isn't fooled by glittery cruelty. She names it."},
+
+{num:42,cat:"Shadow & Discernment",text:"They're not confused. They're strategic.",attr:null,
+wanderer:"Some of what hurt on your path was deliberate. Stop softening it.",
+lightBeing:"Light reveals strategy that hides in chaos. You see it now.",
+demonSlayer:"Treat strategic harm as warfare. Because it is.",
+sovereignEmpath:"An empath wants to believe the best. This time, don't.",
+baddie:"A baddie respects the strategy enough to counter it. Counter it."},
+
+{num:43,cat:"Shadow & Discernment",text:"Weaponized incompetence. You see through it.",attr:null,
+wanderer:"You've carried weight that was never yours. Drop it.",
+lightBeing:"Your energy was being harvested. Stop fueling.",
+demonSlayer:"Convenient incompetence is sabotage. Name it.",
+sovereignEmpath:"Stop picking up what they're conveniently dropping. Let it sit.",
+baddie:"A baddie doesn't fix what someone \"couldn't figure out.\" Let them figure it out."},
+
+// ── Emotional Inner State ──
+{num:44,cat:"Emotional Inner State",text:"Exhausted, but holy. Rest is obedience.",attr:null,
+wanderer:"The path doesn't require constant motion. Rest is part of it.",
+lightBeing:"Light requires rest to renew. Sabbath up.",
+demonSlayer:"Tired warriors lose. Rest is strategy.",
+sovereignEmpath:"Empath fatigue is real. Honor it.",
+baddie:"A baddie naps. Naps are sovereign."},
+
+{num:45,cat:"Emotional Inner State",text:"Grief is love with nowhere to go. Let it move.",attr:null,
+wanderer:"A grief from your path has been waiting for permission. Give it.",
+lightBeing:"Held grief blocks light. Move it through.",
+demonSlayer:"Don't fight grief. It's not the enemy.",
+sovereignEmpath:"Empaths grieve big. Let it be big.",
+baddie:"A baddie cries. The crying is sovereign."},
+
+{num:46,cat:"Emotional Inner State",text:"You're not stuck. You're gestating.",attr:null,
+wanderer:"This pause on the path is preparation. Trust the wait.",
+lightBeing:"Light grows in dark seasons. You're growing.",
+demonSlayer:"The enemy wants you to think you've lost. You haven't.",
+sovereignEmpath:"Slow seasons protect you from absorbing too much. Use them.",
+baddie:"A baddie cooks before she serves. You're cooking."},
+
+{num:47,cat:"Emotional Inner State",text:"Somber minds can heal.",attr:"Aura — North of the Line",
+wanderer:"Your dark seasons aren't disqualifying. They're qualifying.",
+lightBeing:"Heaviness and luminosity coexist. Don't perform lightness.",
+demonSlayer:"Healing is happening even when it doesn't feel like it.",
+sovereignEmpath:"A serious empath is a wise empath. Don't bypass.",
+baddie:"A baddie isn't always smiling. She's always real."},
+
+{num:48,cat:"Emotional Inner State",text:"Overwhelmed? Return to breath. Return to body. Return to Lord.",attr:null,
+wanderer:"The path always returns to these three. Re-anchor.",
+lightBeing:"Three doors back to luminosity. Walk through any of them.",
+demonSlayer:"Spiraling is the enemy's work. Reset and re-engage.",
+sovereignEmpath:"When you're absorbing too much, return. Three steps. Always.",
+baddie:"A baddie has a reset routine. Yours."},
+
+{num:49,cat:"Emotional Inner State",text:"We inspire change. It's time to release your pain.",attr:"Aura — Change",
+wanderer:"Your pain has been a teacher. Let it move on now.",
+lightBeing:"Released pain becomes light for someone else. Release.",
+demonSlayer:"Held pain becomes a doorway demons use. Close it.",
+sovereignEmpath:"Some of the pain on you isn't yours. Release both.",
+baddie:"A baddie doesn't carry old pain. She processes and moves."},
+
+// ── Manifestation & Mindset ──
+{num:50,cat:"Manifestation & Mindset",text:"Speak it. Write it. Burn it. Release it.",attr:null,
+wanderer:"A ritual that has worked before will work again. Use it.",
+lightBeing:"Release is a luminous act. The smoke is prayer.",
+demonSlayer:"Ritual is warfare. Burn what binds you.",
+sovereignEmpath:"Empath rituals work because empaths are sensitive enough to receive their effects.",
+baddie:"A baddie is theatrical. Light the fire."},
+
+{num:51,cat:"Manifestation & Mindset",text:"Imagination is the language God speaks to you in.",attr:null,
+wanderer:"A daydream is a download. Yours have been telling the truth.",
+lightBeing:"Your imagination is a bright channel. Tune it.",
+demonSlayer:"Don't let intrusive thoughts run the imagination. Curate.",
+sovereignEmpath:"What you imagine, you receive. Imagine clean.",
+baddie:"A baddie imagines bigger than seems reasonable. Yours should too."},
+
+{num:52,cat:"Manifestation & Mindset",text:"Just imagine... imagine what could be.",attr:"Aura — Insubordinate",
+wanderer:"Your path expands at the edge of what you can imagine.",
+lightBeing:"Imagination is the spark. Light follows.",
+demonSlayer:"The enemy wants you to imagine small. Imagine big anyway.",
+sovereignEmpath:"Imagine the boundary. Then live it.",
+baddie:"A baddie imagines herself winning. Often. Detailed."},
+
+{num:53,cat:"Manifestation & Mindset",text:"Don't chase it. Become the frequency it lives on.",attr:null,
+wanderer:"Chasing made the path harder. Becoming makes it inevitable.",
+lightBeing:"You attract what matches your light. Tune up.",
+demonSlayer:"Stop hunting demons. Become uninhabitable to them.",
+sovereignEmpath:"Energy follows alignment. Align.",
+baddie:"A baddie magnetizes. She doesn't chase."},
+
+{num:54,cat:"Manifestation & Mindset",text:"Be liquid. Match the shape of what's in front of you. Rigid things shatter. The bend is the strength.",attr:"concept via Bruce Lee",
+wanderer:"Rigidity broke you on the path. Fluidity got you through.",
+lightBeing:"Light moves around obstacles. So does liquid.",
+demonSlayer:"Adaptive warfare wins. Brittle warriors break.",
+sovereignEmpath:"An empath bends without absorbing. Practice the difference.",
+baddie:"A baddie pivots. She's not married to the original plan."},
+
+{num:55,cat:"Manifestation & Mindset",text:"Instill love for one another, all for the change.",attr:"Aura — Change",
+wanderer:"The path led you to love better. Even when it was hard.",
+lightBeing:"Love is the highest light. Pour it.",
+demonSlayer:"Love wins wars demons can't.",
+sovereignEmpath:"Love yourself first. Then the rest.",
+baddie:"A baddie loves loud and clean. No games."},
+
+{num:56,cat:"Manifestation & Mindset",text:"Uplifting movies, music, positive messages.",attr:null,
+wanderer:"Your input shapes your output. The path requires good fuel.",
+lightBeing:"Light feeds on light. Curate your media.",
+demonSlayer:"Negative input is enemy access. Cut it.",
+sovereignEmpath:"Empaths absorb media. Be selective.",
+baddie:"A baddie's playlist is intentional. Yours should be."},
+
+// ── Timing & Transformation ──
+{num:57,cat:"Timing & Transformation",text:"Clock. Perfect Timing.",attr:null,
+wanderer:"The path has its own pace. You don't set it.",
+lightBeing:"Light arrives on schedule. Trust the timing.",
+demonSlayer:"Premature attacks miss. So do premature defenses.",
+sovereignEmpath:"Timing protects you. What's late was meant to be late.",
+baddie:"A baddie doesn't beg the clock. She arrives."},
+
+{num:58,cat:"Timing & Transformation",text:"Phoenix Rising. Rebirth. Renewal.",attr:null,
+wanderer:"A version of the path ended. The new one is brighter.",
+lightBeing:"Burned light returns brighter. You're proof.",
+demonSlayer:"The fire that tried to kill you became your fuel.",
+sovereignEmpath:"Death of who you were makes room for what you absorb less of.",
+baddie:"A baddie comes back hotter. You always do."},
+
+{num:59,cat:"Timing & Transformation",text:"Long live on the dreams of the optimistic.",attr:"Aura — North of the Line",
+wanderer:"Your dreams kept you moving when nothing else did.",
+lightBeing:"Optimism is a high frequency. Hold it.",
+demonSlayer:"Hopeless soldiers lose. Hold hope as armor.",
+sovereignEmpath:"Don't absorb other people's despair. Stay in hope.",
+baddie:"A baddie believes she'll win. Even when it doesn't look like it."},
+
+{num:60,cat:"Timing & Transformation",text:"Redesigned and reborn, this vessel.",attr:"Aura — Change",
+wanderer:"A new version of you is on the path. Step into it.",
+lightBeing:"A new vessel holds new light. Receive it.",
+demonSlayer:"The old you was a target. The new one isn't.",
+sovereignEmpath:"A redesigned empath has filters. You do now.",
+baddie:"A baddie reinvents on schedule. This is yours."},
+
+// ── Financial & Abundance ──
+{num:61,cat:"Financial & Abundance",text:"Money is energy. Your biofield determines the flow.",attr:null,
+wanderer:"Money has tracked your healing. Look at the correlation.",
+lightBeing:"Clean light = clean flow. Both spiritual and material.",
+demonSlayer:"Money blocks are often spiritual. Address the spirit, the money flows.",
+sovereignEmpath:"You absorb financial fear from rooms. Stop.",
+baddie:"A baddie's worth isn't in her account, but the account follows the worth."},
+
+{num:62,cat:"Financial & Abundance",text:"Wealth transfer. The inheritance is spiritual AND material.",attr:null,
+wanderer:"Your lineage gave you something. Both kinds.",
+lightBeing:"Light is inherited. So is wealth, sometimes.",
+demonSlayer:"The enemy wants you broke. The Father wants you funded.",
+sovereignEmpath:"An empath inherits emotional patterns too. Sort them.",
+baddie:"A baddie expects her inheritance. Receive it."},
+
+{num:63,cat:"Financial & Abundance",text:"Scarcity is a spell. Break it.",attr:null,
+wanderer:"The not-enough story has shaped your path. Rewrite it.",
+lightBeing:"Scarcity dims light. Abundance amplifies it.",
+demonSlayer:"A spell can be broken. You have the authority.",
+sovereignEmpath:"You absorbed scarcity early. Release.",
+baddie:"A baddie doesn't operate from lack. Even if her bank account is small."},
+
+{num:64,cat:"Financial & Abundance",text:"Build the ark before the flood.",attr:"Genesis 6",
+wanderer:"The path now is preparation. Build.",
+lightBeing:"Foresight is a gift of light. You have it.",
+demonSlayer:"The flood is coming. Be ready.",
+sovereignEmpath:"Empaths sense storms early. Use the lead time.",
+baddie:"A baddie plans. She doesn't react."},
+
+// ── Path / Calling / Service ──
+{num:65,cat:"Path & Calling",text:"Discover, training, learn, school, mentor, teacher.",attr:null,
+wanderer:"Your path includes formal study. The 19 schools were practice.",
+lightBeing:"Learning expands your light. Stay a student.",
+demonSlayer:"The trained warrior wins. Train.",
+sovereignEmpath:"Mentorship gives you tools you can't intuit alone.",
+baddie:"A baddie invests in herself. Keep learning."},
+
+{num:66,cat:"Path & Calling",text:"Spiritual work. Open your heart to a spiritual career and heal the human heart.",attr:null,
+wanderer:"The mission is spiritual. You knew. Now you say yes.",
+lightBeing:"Your light is meant to heal others. Don't dim it.",
+demonSlayer:"Healers are warriors. Battle disguised as service.",
+sovereignEmpath:"Empaths are healers. It's the calling, not the burden.",
+baddie:"A baddie monetizes her gift. Spiritual work pays. Allow it."},
+
+{num:67,cat:"Path & Calling",text:"The calling is already calling. Pick up the phone.",attr:null,
+wanderer:"The path has been waiting on your yes.",
+lightBeing:"A calling is light asking to come through you. Open up.",
+demonSlayer:"Resistance to calling is enemy work. Push through.",
+sovereignEmpath:"An empath without purpose absorbs purpose from others. Get yours.",
+baddie:"A baddie answers her own call. Fast."},
+
+{num:68,cat:"Path & Calling",text:"You are the surface of the unborn wave.",attr:"Aura — As Worlds Collide",
+wanderer:"You're early. The path you're on hasn't been walked yet.",
+lightBeing:"Pioneer light is bright and lonely. Hold steady.",
+demonSlayer:"First-movers are first-targets. Armor up.",
+sovereignEmpath:"You feel the wave before others do. Trust the early warning.",
+baddie:"A baddie is ahead. Stop apologizing for being early."},
+
+{num:69,cat:"Path & Calling",text:"Your purpose isn't hidden. You're just scared to claim it.",attr:null,
+wanderer:"The path is in front of you. Claim it.",
+lightBeing:"Hidden light becomes resentful. Shine.",
+demonSlayer:"Fear of purpose is the enemy's last move. Override.",
+sovereignEmpath:"Other people's expectations have buried yours. Dig.",
+baddie:"A baddie says her purpose out loud. Even when it sounds wild."},
+
+// ── Motherhood & Inner Child ──
+{num:70,cat:"Motherhood & Inner Child",text:"Your body grew a universe. Treat it like holy ground.",attr:null,
+wanderer:"Your body has carried more than the path required. Honor it.",
+lightBeing:"A revered body holds more light. Revere.",
+demonSlayer:"Body neglect is self-attack. Stop.",
+sovereignEmpath:"Your body is your most sensitive instrument. Tune it kindly.",
+baddie:"A baddie loves her body. Imperfections included."},
+
+{num:71,cat:"Motherhood & Inner Child",text:"Mothering is spiritual warfare in the most ordinary clothes.",attr:null,
+wanderer:"The mother chapter is part of the path. Not a detour.",
+lightBeing:"Mothering is light work. Don't downplay it.",
+demonSlayer:"The dishes are altar work. The bedtime is battle prep.",
+sovereignEmpath:"Empath mothers absorb their kids' fields. Cleanse.",
+baddie:"A baddie can mother and still be a baddie. Both/and."},
+
+{num:72,cat:"Motherhood & Inner Child",text:"Rest assured child, evolved.",attr:"Aura — Change",
+wanderer:"A version of you that needed reassurance got it. The work worked.",
+lightBeing:"Your inner light has matured. Trust it.",
+demonSlayer:"The healed inner child is a weapon. The wounded one was a wound.",
+sovereignEmpath:"Inner-child work is empath work. Done.",
+baddie:"A baddie graduates her younger selves. You graduated."},
+
+{num:73,cat:"Motherhood & Inner Child",text:"Nurture your inner child. Play. Heal trauma. Have fun.",attr:null,
+wanderer:"The child in you needs attention before the path continues.",
+lightBeing:"Joy is the inner child's language. Speak it.",
+demonSlayer:"Trauma is enemy access. Heal and lock the door.",
+sovereignEmpath:"A whole inner child absorbs less. She doesn't need to scan rooms.",
+baddie:"A baddie plays. Adulthood didn't mean killing fun."},
+
+// ── Joy & Embodiment ──
+{num:74,cat:"Joy & Embodiment",text:"Pleasure is a protection. High vibe = impenetrable.",attr:null,
+wanderer:"Pleasure has been a strategic tool on the path. Not just enjoyment. Use it.",
+lightBeing:"Pleasure raises light. Pleasure is worship sometimes.",
+demonSlayer:"A pleasured body is a hard target. Stay pleasured.",
+sovereignEmpath:"Empaths need pleasure as recovery. Schedule it.",
+baddie:"A baddie pleasures herself first. Period."},
+
+{num:75,cat:"Joy & Embodiment",text:"I am here, and I am sound.",attr:"Aura — Within the Power of Music",
+wanderer:"Music has been with you on every part of the path. Keep it close.",
+lightBeing:"You ARE sound. You ARE light. Both.",
+demonSlayer:"Sound clears spaces. Use it as a weapon.",
+sovereignEmpath:"Sound regulates faster than thought. Bypass the brain.",
+baddie:"A baddie has theme music. Yours should be on."},
+
+{num:76,cat:"Joy & Embodiment",text:"Taste, touch, smell, sight, sound. 5 senses = 5 gates to the divine.",attr:null,
+wanderer:"The body has been the path's instrument. Honor each sense.",
+lightBeing:"Embodied light is the highest light. Use the gates.",
+demonSlayer:"Numbed senses leave you defenseless. Wake them.",
+sovereignEmpath:"Empaths feel through the body. Sharpen each gate.",
+baddie:"A baddie is sensual. Five gates wide open."},
+
+{num:77,cat:"Joy & Embodiment",text:"Aromatherapy. Use essential oils.",attr:null,
+wanderer:"Scent has reset you on the path. Carry the bottle.",
+lightBeing:"Smell is a fast track to high vibe. Use it.",
+demonSlayer:"Essential oils are medicine and weapon. Both.",
+sovereignEmpath:"Empaths shift moods through scent quickly. Build the kit.",
+baddie:"A baddie smells expensive. Even on a budget. Choose the oil."},
+
+// ── Practice & Reset ──
+{num:78,cat:"Practice & Reset",text:"Sound healing, harmonic resonance, tuning forks, listen to healing music/nature sounds.",attr:null,
+wanderer:"The path leads back to frequency. Eventually always.",
+lightBeing:"You ARE resonance. Tune yourself.",
+demonSlayer:"Discordant sound is a weapon against you. Harmonic sound counters.",
+sovereignEmpath:"An empath out of tune absorbs more. Tune up.",
+baddie:"A baddie has frequency standards. Hers are high."},
+
+{num:79,cat:"Practice & Reset",text:"Unplug. Ground. Drink water. Cry if needed. Rise.",attr:null,
+wanderer:"The five-step homecoming. Memorize.",
+lightBeing:"Light returns when you do these in order. They work.",
+demonSlayer:"Reset protocol. Every warrior needs one.",
+sovereignEmpath:"Empath emergency drill. Use when overwhelmed.",
+baddie:"A baddie rises. Always. Yours is on the way."},
+];
+
+/* ── State ─────────────────────────────────────────────── */
+let drawn = [];
+let inSelection = true;
+
+const deckEl    = document.getElementById('deck');
+const slotsEl   = document.getElementById('slots');
+const counterEl = document.getElementById('counter');
+const readingEl = document.getElementById('reading');
+const interpsEl = document.getElementById('interpretations');
+const resetBtn  = document.getElementById('resetBtn');
+const deckWrap  = document.getElementById('deckWrap');
+
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function httpsPost(options, body) {
-  const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-        ...options.headers
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve({ status: res.statusCode, body: data });
-        } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.write(bodyStr);
-    req.end();
+function buildFan(){
+  deckEl.innerHTML='';
+  const fan=shuffle(DECK).slice(0,10);
+  const arcDeg=50,start=-arcDeg/2,stepDeg=arcDeg/(fan.length-1),radius=280;
+  fan.forEach((card,i)=>{
+    const angle=start+stepDeg*i;
+    const el=document.createElement('div');
+    el.className='card'; el.tabIndex=0;
+    el.setAttribute('role','button');
+    el.setAttribute('aria-label',`Face-down card ${i+1}. Tap to draw.`);
+    el.style.transform=`rotate(${angle}deg) translateY(-${radius-220}px)`;
+    el.style.zIndex=i;
+    el.innerHTML=`<div class="card-inner"><div class="card-face card-back"><div class="moon-mark">☽</div><div class="hmo">HMO</div><div class="eleven">11</div></div></div>`;
+    el.addEventListener('click',()=>onDraw(el,card));
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onDraw(el,card);}});
+    deckEl.appendChild(el);
   });
 }
 
-function sendEmail({ to, from, subject, html }) {
-  return httpsPost(
-    {
-      hostname: 'api.resend.com',
-      path: '/emails',
-      method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }
-    },
-    { from, to, reply_to: process.env.ADMIN_EMAIL, subject, html }
-  );
+function onDraw(el,card){
+  if(!inSelection||drawn.length>=5||el.classList.contains('taken'))return;
+  el.classList.add('taken');
+  drawn.push(card);
+  updateCounter();
+  placeInSlot(card,drawn.length-1);
+  if(drawn.length===5){inSelection=false;setTimeout(showReading,1100);}
 }
 
-function subscribeToKit(email) {
-  return httpsPost(
-    {
-      hostname: 'api.convertkit.com',
-      path: `/v3/forms/${process.env.CONVERTKIT_FORM_ID}/subscribe`,
-      method: 'POST'
-    },
-    {
-      api_key: process.env.CONVERTKIT_API_KEY,
-      email,
-      tags: ['hmo-oracle-pull'] // optional: tag them in Kit
+function placeInSlot(card,index){
+  const slot=slotsEl.querySelector(`.slot[data-pos="${index}"]`);
+  slot.classList.add('filled');
+  const newCard=document.createElement('div');
+  newCard.className='card';
+  newCard.innerHTML=`
+    <div class="card-inner">
+      <div class="card-face card-back"><div class="moon-mark">☽</div><div class="hmo">HMO</div><div class="eleven">11</div></div>
+      <div class="card-face card-front">
+        <div class="top"><span>${card.cat}</span><span class="num">№${card.num}</span></div>
+        <div class="body">${card.text}</div>
+        <div class="attr">${card.attr?'— '+card.attr:''}</div>
+      </div>
+    </div>`;
+  slot.appendChild(newCard);
+  requestAnimationFrame(()=>{setTimeout(()=>newCard.classList.add('flipped'),250);});
+}
+
+function updateCounter(){
+  const left=5-drawn.length;
+  if(left===0){
+    counterEl.innerHTML=`<span class="num">✦</span> THE CARDS HAVE SPOKEN <span class="num">✦</span>`;
+  } else {
+    counterEl.innerHTML=`CHOOSE <span class="num">${left}</span> ${left===1?'CARD':'CARDS'}`;
+  }
+}
+
+function showReading(){
+  deckWrap.classList.add('hidden');
+  interpsEl.innerHTML='';
+  drawn.forEach((card,i)=>{
+    const key=POS_KEYS[i];
+    const block=document.createElement('div');
+    block.className='interp';
+    block.innerHTML=`
+      <div class="energy-label">${POS_SYMS[i]} ${POSITIONS[i]}</div>
+      <div class="meta">№ ${card.num} · ${card.cat}</div>
+      <div class="card-text">"${card.text}"</div>
+      ${card.attr?`<div class="attr-line">— ${card.attr}</div>`:''}
+      <div class="pos-interp">${card[key]}</div>`;
+    interpsEl.appendChild(block);
+  });
+  readingEl.classList.add('visible');
+  resetBtn.disabled=false;
+  document.getElementById('saveImgBtn').style.display='';
+  setTimeout(()=>{readingEl.scrollIntoView({behavior:'smooth',block:'start'});},400);
+  setTimeout(showEmailCapture,1400);
+}
+
+function reset(){
+  drawn=[]; inSelection=true; resetBtn.disabled=true;
+  slotsEl.querySelectorAll('.slot').forEach((slot,i)=>{
+    slot.classList.remove('filled');
+    slot.innerHTML=`<span class="slot-sym">${POS_SYMS[i]}</span><span class="slot-label">${POSITIONS[i]}</span>`;
+  });
+  readingEl.classList.remove('visible');
+  interpsEl.innerHTML='';
+  document.getElementById('saveImgBtn').style.display='none';
+  hideEmailCapture();
+  deckWrap.classList.remove('hidden');
+  buildFan(); updateCounter();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+resetBtn.addEventListener('click',reset);
+
+/* ── Canvas reading image ──────────────────────────────── */
+const ECOLS=['#d4af37','#f9b8d4','#c9526a','#9b74c4','#ff8c42'];
+
+async function ensureFonts(){
+  try{
+    await Promise.all([
+      document.fonts.load('700 46px Caveat'),
+      document.fonts.load('italic 600 88px "Cormorant Garamond"'),
+      document.fonts.load('500 28px Cinzel'),
+      document.fonts.load('italic 500 36px "Cormorant Garamond"'),
+    ]);
+  }catch(e){}
+}
+
+function wrapLines(ctx,text,maxW){
+  const words=text.split(' '),lines=[];
+  let line='';
+  for(const w of words){
+    const t=line?line+' '+w:w;
+    if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=w;}
+    else line=t;
+  }
+  if(line)lines.push(line);
+  return lines;
+}
+
+function drawWrapped(ctx,text,x,y,maxW,lh){
+  wrapLines(ctx,text,maxW).forEach((ln,i)=>ctx.fillText(ln,x,y+i*lh));
+  return y+wrapLines(ctx,text,maxW).length*lh;
+}
+
+function measureSec(ctx,card,key,IW){
+  let h=44;                              // pad top
+  h+=50+12;                              // energy label row + gap
+  ctx.font='700 46px Caveat';
+  h+=wrapLines(ctx,`"${card.text}"`,IW).length*58+10;
+  if(card.attr)h+=38;
+  h+=24;                                 // divider + gap
+  ctx.font='italic 500 36px "Cormorant Garamond"';
+  h+=wrapLines(ctx,card[key],IW).length*48;
+  h+=44;                                 // pad bottom
+  return h;
+}
+
+async function buildCanvas(){
+  await ensureFonts();
+  const W=1080,MX=64,CW=W-MX*2,BAR=6,IX=MX+BAR+28,IW=CW-BAR-40;
+  const yr=new Date().getFullYear();
+
+  // Measure pass
+  const probe=document.createElement('canvas');
+  probe.width=W;probe.height=100;
+  const pc=probe.getContext('2d');
+  const secH=drawn.map((c,i)=>measureSec(pc,c,POS_KEYS[i],IW));
+  const GAP=20;
+  const totalH=440+secH.reduce((a,h)=>a+h+GAP,0)+200;
+
+  // Create canvas
+  const cv=document.createElement('canvas');
+  cv.width=W;cv.height=totalH;
+  const ctx=cv.getContext('2d');
+
+  // Background
+  const bgG=ctx.createLinearGradient(0,0,0,totalH);
+  bgG.addColorStop(0,'#07041a');bgG.addColorStop(0.25,'#1a0b3d');
+  bgG.addColorStop(0.75,'#1a0b3d');bgG.addColorStop(1,'#07041a');
+  ctx.fillStyle=bgG;ctx.fillRect(0,0,W,totalH);
+
+  // Glow blobs
+  function hexRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+  [[W/2,0,'#ff6b9d',0.28],[W*0.1,totalH*0.5,'#ff8c42',0.18],[W*0.9,totalH*0.6,'#c9526a',0.18]].forEach(([gx,gy,col,op])=>{
+    const[r,g,b]=hexRgb(col);
+    const rg=ctx.createRadialGradient(gx,gy,0,gx,gy,W*0.6);
+    rg.addColorStop(0,`rgba(${r},${g},${b},${op})`);
+    rg.addColorStop(1,'transparent');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,W,totalH);
+  });
+
+  // Stars
+  [[0.12,0.02],[0.85,0.05],[0.34,0.04],[0.67,0.01],[0.92,0.09],[0.05,0.12],[0.56,0.03],[0.78,0.15]].forEach(([px,py])=>{
+    ctx.fillStyle='rgba(255,255,255,0.7)';
+    ctx.beginPath();ctx.arc(px*W,py*totalH,2,0,Math.PI*2);ctx.fill();
+  });
+
+  // ── Header ─────────────────────────────────────────────
+  ctx.textAlign='center';
+  let y=68;
+  ctx.font='400 28px Cinzel';ctx.fillStyle='#ff6b9d';ctx.fillText('✦  ☽  ✦',W/2,y);y+=66;
+  ctx.font='italic 600 88px "Cormorant Garamond"';ctx.fillStyle='#f4b942';ctx.fillText('Heather Moon Oracle',W/2,y);y+=62;
+  ctx.font='400 28px Cinzel';ctx.fillStyle='#f4b942';ctx.fillText('5-CARD HMS ENERGY SPREAD',W/2,y);y+=46;
+  ctx.font='600 42px Caveat';ctx.fillStyle='#ff8c42';ctx.fillText('spicy but sanctuary',W/2,y);y+=52;
+
+  // Divider
+  const dg=ctx.createLinearGradient(MX,y,W-MX,y);
+  dg.addColorStop(0,'transparent');dg.addColorStop(0.4,'#ff6b9d');dg.addColorStop(0.6,'#ff8c42');dg.addColorStop(1,'transparent');
+  ctx.strokeStyle=dg;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(MX,y);ctx.lineTo(W-MX,y);ctx.stroke();
+  ctx.font='italic 400 22px "Cormorant Garamond"';ctx.fillStyle='#ff6b9d';ctx.fillText('☽',W/2,y+12);
+  y+=44;
+
+  // ── Card sections ───────────────────────────────────────
+  drawn.forEach((card,idx)=>{
+    const key=POS_KEYS[idx],sH=secH[idx],ec=ECOLS[idx];
+
+    ctx.fillStyle='rgba(45,27,105,0.28)';
+    ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(MX,y,CW,sH,12);else ctx.rect(MX,y,CW,sH);
+    ctx.fill();
+
+    ctx.fillStyle=ec;
+    ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(MX,y,BAR,sH,[12,0,0,12]);else ctx.rect(MX,y,BAR,sH);
+    ctx.fill();
+
+    let sy=y+44;
+
+    // Energy label
+    ctx.textAlign='left';
+    ctx.font='500 28px Cinzel';ctx.fillStyle=ec;
+    ctx.fillText(`${POS_SYMS[idx]}  ${POSITIONS[idx].toUpperCase()}`,IX,sy);
+
+    // Card meta (right aligned)
+    ctx.textAlign='right';ctx.font='400 22px Cinzel';ctx.fillStyle='rgba(253,242,220,0.45)';
+    ctx.fillText(`#${card.num} · ${card.cat}`,MX+CW-14,sy);
+    sy+=62;
+
+    // Card text
+    ctx.textAlign='left';ctx.font='700 46px Caveat';ctx.fillStyle='#d4581c';
+    sy=drawWrapped(ctx,`"${card.text}"`,IX,sy,IW,58)+10;
+
+    // Attribution
+    if(card.attr){
+      ctx.font='italic 400 28px "Cormorant Garamond"';ctx.fillStyle='rgba(244,185,66,0.75)';
+      ctx.fillText(`— ${card.attr}`,IX,sy);sy+=38;
     }
-  );
-}
 
-// ── Energy colors ─────────────────────────────────────────────────────────────
-function energyColor(position) {
-  const map = {
-    'Wanderer': '#d4af37',
-    'Light Being': '#f9b8d4',
-    'Demon Slayer': '#c9526a',
-    'Sovereign Empath': '#9b74c4',
-    'Baddie': '#ff8c42'
-  };
-  return map[position] || '#ff6b9d';
-}
+    // Inner divider
+    ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(IX,sy+6);ctx.lineTo(MX+CW-14,sy+6);ctx.stroke();
+    sy+=24;
 
-// ── USER email template ───────────────────────────────────────────────────────
-function buildUserEmail(email, cards, timestamp) {
-  const year = new Date(timestamp).getFullYear();
+    // Interpretation
+    ctx.font='italic 500 36px "Cormorant Garamond"';ctx.fillStyle='rgba(253,242,220,0.88)';
+    drawWrapped(ctx,card[key],IX,sy,IW,48);
 
-  const cardBlocks = cards.map(c => {
-    const ec = energyColor(c.position);
-    return `
-      <div style="margin:16px 0;padding:22px 20px 22px 24px;background:#2a1260;border-radius:10px;
-                  border-left:5px solid ${ec};">
-        <div style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;
-                    color:${ec};text-transform:uppercase;margin-bottom:8px;">
-          ${c.position}
-        </div>
-        <div style="font-family:Georgia,serif;font-size:16px;color:#d4581c;
-                    margin-bottom:${c.attr ? '6px' : '12px'};font-style:italic;
-                    line-height:1.4;">
-          &ldquo;${c.text}&rdquo;
-        </div>
-        ${c.attr ? `
-          <div style="font-family:Georgia,serif;font-size:12px;color:#f4b942;
-                      margin-bottom:12px;font-style:italic;opacity:0.85;">
-            &mdash; ${c.attr}
-          </div>` : ''}
-        <div style="font-family:Georgia,serif;font-size:14px;color:#e8d4f0;
-                    line-height:1.65;font-style:italic;
-                    border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;">
-          ${c.interpretation || ''}
-        </div>
-      </div>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Your Heather Moon Oracle Reading</title>
-</head>
-<body style="margin:0;padding:0;background:#07041a;">
-<div style="max-width:600px;margin:0 auto;padding:32px 16px 48px;
-            font-family:Georgia,serif;background:#07041a;">
-
-  <!-- Header -->
-  <div style="text-align:center;margin-bottom:28px;">
-    <div style="color:#ff6b9d;font-size:14px;letter-spacing:8px;margin-bottom:12px;">
-      ✦ ☽ ✦
-    </div>
-    <h1 style="margin:0 0 6px;font-size:34px;font-style:italic;color:#f4b942;font-weight:normal;">
-      Heather Moon Oracle
-    </h1>
-    <div style="color:#ff8c42;font-size:14px;letter-spacing:2px;margin-bottom:4px;">
-      5-CARD HMS ENERGY SPREAD
-    </div>
-    <div style="color:rgba(253,242,220,0.6);font-size:13px;font-style:italic;">
-      spicy but sanctuary
-    </div>
-  </div>
-
-  <!-- Intro -->
-  <div style="background:#1a0b3d;border-radius:12px;padding:26px;margin-bottom:20px;">
-    <p style="color:#fdf2dc;font-size:16px;line-height:1.75;margin:0 0 14px;">
-      love &mdash;
-    </p>
-    <p style="color:#fdf2dc;font-size:16px;line-height:1.75;margin:0 0 14px;">
-      your reading landed. five cards from 79, out of over 2.7 billion possible
-      combinations &mdash; and <em>these</em> are the ones that showed up for you.
-      that&rsquo;s not random. that&rsquo;s the deck doing what it was built to do.
-    </p>
-    <p style="color:#fdf2dc;font-size:16px;line-height:1.75;margin:0;">
-      sit with it. let it breathe. the message that&rsquo;s meant for you right now
-      is already inside these five cards.
-    </p>
-  </div>
-
-  <!-- Spread -->
-  <div style="background:#1a0b3d;border-radius:12px;padding:26px;margin-bottom:20px;">
-    <div style="text-align:center;color:#ff6b9d;font-size:11px;
-                letter-spacing:4px;text-transform:uppercase;margin-bottom:16px;">
-      ✦ your spread ✦
-    </div>
-    ${cardBlocks}
-  </div>
-
-  <!-- Newsletter note -->
-  <div style="background:#1a0b3d;border-radius:12px;padding:26px;margin-bottom:20px;">
-    <p style="color:#fdf2dc;font-size:15px;line-height:1.75;margin:0 0 14px;">
-      you&rsquo;ve also been added to the
-      <strong style="color:#f4b942;">Heather Moon Sanctuary</strong>
-      weekly newsletter &mdash; every Sunday, a real sky report, a live collective
-      pull, and the Five Energies framework woven through all of it. no fluff.
-      no performance. just the actual cosmic weather and what it means for you.
-    </p>
-    <p style="color:#fdf2dc;font-size:15px;line-height:1.75;margin:0;">
-      a deeper, personalized interpretation of your spread may find its way to you
-      too. the deck already knows what you needed to hear. i&rsquo;m just going to
-      help you hear it louder.
-    </p>
-  </div>
-
-  <!-- Closer -->
-  <div style="text-align:center;padding:24px 0 8px;">
-    <div style="font-family:Georgia,serif;font-style:italic;font-size:30px;
-                color:#ff8c42;margin-bottom:12px;">
-      the cape fits.
-    </div>
-    <div style="color:#fdf2dc;font-size:14px;margin-bottom:6px;">
-      &mdash; Heather 💗
-    </div>
-    <div style="color:rgba(253,242,220,0.5);font-size:12px;font-style:italic;
-                margin-bottom:24px;">
-      Heather Moon Sanctuary &mdash; spicy but sanctuary.
-    </div>
-    <div style="border-top:1px solid rgba(255,107,157,0.2);padding-top:20px;">
-      <div style="color:rgba(253,242,220,0.3);font-size:11px;font-style:italic;
-                  line-height:1.6;">
-        &copy; ${year} Heather Moon Sanctuary &middot; Heather Green
-        &middot; All rights reserved<br>
-        Heather Moon Oracle &mdash; 79 cards &middot; written by hand
-      </div>
-    </div>
-  </div>
-
-</div>
-</body>
-</html>`;
-}
-
-// ── ADMIN email template ──────────────────────────────────────────────────────
-function buildAdminEmail(email, cards, timestamp) {
-  const dateStr = new Date(timestamp).toLocaleString('en-US', {
-    timeZone: 'America/Denver',
-    weekday: 'short', month: 'short', day: 'numeric',
-    year: 'numeric', hour: '2-digit', minute: '2-digit'
+    y+=sH+GAP;
   });
 
-  const cardRows = cards.map((c, i) => `
-    <tr style="background:${i % 2 === 0 ? '#f9f9f9' : '#ffffff'};">
-      <td style="padding:10px 12px;border:1px solid #ddd;font-weight:bold;
-                 white-space:nowrap;vertical-align:top;">
-        ${i + 1}. ${c.position}
-      </td>
-      <td style="padding:10px 12px;border:1px solid #ddd;vertical-align:top;">
-        <strong>#${c.num} &mdash; ${c.cat}</strong><br>
-        <em style="color:#a8410f;">&ldquo;${c.text}&rdquo;</em><br>
-        ${c.attr ? `<span style="color:#7b5c00;font-size:12px;">&mdash; ${c.attr}</span><br>` : ''}
-        <span style="color:#555;font-size:13px;">${c.interpretation || ''}</span>
-      </td>
-    </tr>`
-  ).join('');
+  // ── Footer ──────────────────────────────────────────────
+  y+=30;ctx.textAlign='center';
+  const fg=ctx.createLinearGradient(W/2-260,y,W/2+260,y);
+  fg.addColorStop(0,'#ff6b9d');fg.addColorStop(1,'#ff8c42');
+  ctx.font='700 60px Caveat';ctx.fillStyle=fg;ctx.fillText('the cape fits.',W/2,y);y+=56;
 
-  const aiPrompt = cards.map((c, i) =>
-    `${i + 1}. [${c.position}] Card #${c.num}: "${c.text}"${c.attr ? ` (${c.attr})` : ''}`
-  ).join('\n');
+  ctx.font='400 24px Cinzel';ctx.fillStyle='rgba(255,107,157,0.55)';ctx.fillText('✦  ☽  ✦',W/2,y);y+=38;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>HMO Reading — Admin</title>
-</head>
-<body style="margin:0;padding:20px;background:#f4f4f4;font-family:Arial,sans-serif;">
-<div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;
-            overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+  ctx.font='italic 400 24px "Cormorant Garamond"';ctx.fillStyle='rgba(253,242,220,0.38)';
+  ctx.fillText('Heather Moon Oracle · 79 cards · HMS Energy Spread',W/2,y);y+=34;
 
-  <!-- Header -->
-  <div style="background:#1a0b3d;padding:20px 24px;">
-    <div style="color:#ff6b9d;font-size:18px;margin-bottom:4px;">
-      🌙 HMO Reading Notification
-    </div>
-    <div style="color:rgba(253,242,220,0.7);font-size:13px;">
-      Heather Moon Oracle &mdash; 5-Card HMS Energy Spread
-    </div>
-  </div>
+  ctx.font='italic 400 22px "Cormorant Garamond"';ctx.fillStyle='rgba(253,242,220,0.55)';
+  ctx.fillText(`© ${yr} Heather Moon Sanctuary · Heather Green · All rights reserved`,W/2,y);
 
-  <div style="padding:24px;">
-
-    <!-- Meta -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      <tr>
-        <td style="padding:10px 12px;border:1px solid #ddd;background:#f0e8ff;
-                   font-weight:bold;width:140px;">User Email</td>
-        <td style="padding:10px 12px;border:1px solid #ddd;">
-          <a href="mailto:${email}">${email}</a>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:10px 12px;border:1px solid #ddd;background:#f0e8ff;
-                   font-weight:bold;">Timestamp</td>
-        <td style="padding:10px 12px;border:1px solid #ddd;">${dateStr} MT</td>
-      </tr>
-    </table>
-
-    <!-- Card spread -->
-    <h3 style="color:#2d1b69;margin:0 0 12px;font-size:15px;
-               text-transform:uppercase;letter-spacing:1px;">
-      Card Spread
-    </h3>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      <thead>
-        <tr style="background:#2d1b69;color:#fff;">
-          <th style="padding:10px 12px;border:1px solid #ddd;text-align:left;
-                     white-space:nowrap;">Position</th>
-          <th style="padding:10px 12px;border:1px solid #ddd;text-align:left;">
-            Card &amp; Interpretation
-          </th>
-        </tr>
-      </thead>
-      <tbody>${cardRows}</tbody>
-    </table>
-
-    <!-- AI prompt box -->
-    <div style="background:#fff8e1;border:1px solid #f4b942;border-left:5px solid #f4b942;
-                border-radius:4px;padding:16px;margin-bottom:24px;">
-      <div style="font-weight:bold;color:#7b5c00;margin-bottom:10px;font-size:14px;">
-        ✨ Personalized Interpretation Prompt
-      </div>
-      <p style="color:#555;font-size:13px;margin:0 0 10px;line-height:1.5;">
-        Paste this into Claude or ChatGPT to generate a personalized reading for
-        this subscriber:
-      </p>
-      <div style="background:#fff;border:1px solid #ddd;border-radius:4px;
-                  padding:14px;font-size:13px;color:#333;">
-        <strong>Context:</strong> You are reading for a subscriber of Heather Moon
-        Sanctuary. The brand voice is &ldquo;spicy but sanctuary&rdquo; &mdash; direct,
-        warm, spiritually grounded, occasionally spicy. The Heather Moon Oracle is a
-        79-card handwritten deck covering biofield science, scripture, spiritual
-        warfare, shadow work, identity, money, calling, motherhood, and joy.
-        <br><br>
-        <strong>Their 5-card HMS Energy Spread:</strong><br>
-        <pre style="margin:10px 0 0;font-size:12px;white-space:pre-wrap;
-                    line-height:1.6;">${aiPrompt}</pre>
-        <br>
-        Write a personalized 3-4 paragraph interpretation. Speak directly in second
-        person (&ldquo;you&rdquo;). Find the through-line across all five energies.
-        Close with &ldquo;the cape fits.&rdquo;
-      </div>
-    </div>
-
-    <!-- Quick reply note -->
-    <div style="background:#f0f8ff;border:1px solid #b8d4f0;border-radius:4px;
-                padding:14px;font-size:13px;color:#333;">
-      <strong>Reply directly to the user:</strong>
-      <a href="mailto:${email}?subject=your%20personal%20reading%20☽" 
-         style="color:#2d1b69;margin-left:8px;">
-        ${email}
-      </a>
-    </div>
-
-  </div>
-</div>
-</body>
-</html>`;
+  return cv;
 }
+
+/* ── Save handlers ─────────────────────────────────────── */
+const imgPanel      = document.getElementById('imgPanel');
+const readingImg    = document.getElementById('readingImg');
+const imgPanelClose = document.getElementById('imgPanelClose');
+
+function closeImagePanel(){
+  imgPanel.classList.remove('open');
+}
+
+async function openImagePanel(){
+  const btn=document.getElementById('saveImgBtn');
+  const orig=btn.textContent;btn.textContent='Building...';btn.disabled=true;
+  try{
+    const cv=await buildCanvas();
+    readingImg.src=cv.toDataURL('image/png');
+    imgPanel.classList.add('open');
+    imgPanel.scrollTop=0;
+  }catch(e){
+    alert('Could not generate image. Try screenshotting the reading directly.');
+    console.error(e);
+  }finally{
+    btn.textContent=orig;btn.disabled=false;
+  }
+}
+
+
+document.getElementById('saveImgBtn').addEventListener('click',openImagePanel);
+imgPanelClose.addEventListener('click',closeImagePanel);
+imgPanel.addEventListener('click',e=>{if(e.target===imgPanel)closeImagePanel();});
+
+buildFan();
+updateCounter();
+</script>
+</body>
+</html>
+<script>
+/* ── Email capture ─────────────────────────────────────────────────────── */
+/* NOTE: this block appended after main script — fully functional           */
+function showEmailCapture(){
+  const el=document.getElementById('emailCapture');
+  if(el){el.classList.add('visible');
+    setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'nearest'}),600);}
+}
+function hideEmailCapture(){
+  const el=document.getElementById('emailCapture');
+  if(!el)return;
+  el.classList.remove('visible');
+  document.getElementById('emailForm').style.display='flex';
+  document.getElementById('emailSuccess').style.display='none';
+  document.getElementById('emailError').style.display='none';
+  document.getElementById('emailInput').value='';
+  document.getElementById('emailSubmit').disabled=false;
+  document.getElementById('emailSubmit').textContent='send my reading';
+}
+document.getElementById('emailForm').addEventListener('submit',async()=>{
+  const emailInput=document.getElementById('emailInput');
+  const submitBtn=document.getElementById('emailSubmit');
+  const successEl=document.getElementById('emailSuccess');
+  const errorEl=document.getElementById('emailError');
+  const email=emailInput.value.trim();
+  if(!email)return;
+  submitBtn.disabled=true;
+  submitBtn.textContent='sending...';
+  errorEl.style.display='none';
+  const payload={
+    email,timestamp:new Date().toISOString(),
+    cards:drawn.map((card,i)=>({
+      num:card.num,cat:card.cat,text:card.text,attr:card.attr||null,
+      position:POSITIONS[i],interpretation:card[POS_KEYS[i]]
+    }))
+  };
+  try{
+    const res=await fetch('/.netlify/functions/send-reading',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(!res.ok)throw new Error('Status '+res.status);
+    document.getElementById('emailForm').style.display='none';
+    successEl.style.display='block';
+  }catch(err){
+    console.error('Email capture error:',err);
+    submitBtn.disabled=false;
+    submitBtn.textContent='send my reading';
+    errorEl.style.display='block';
+  }
+});
+</script>
