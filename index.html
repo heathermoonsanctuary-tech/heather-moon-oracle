@@ -337,6 +337,19 @@
   .btn:disabled{opacity:.35;cursor:not-allowed;}
   .btn:disabled:hover{background:transparent;color:var(--cream);border-color:var(--pink);box-shadow:none;}
 
+  .interp-cta{
+    display:none;
+    text-align:center;margin-top:20px;
+    font-family:'Cormorant Garamond',serif;font-style:italic;
+    font-size:1rem;line-height:1.8;color:rgba(253,242,220,.7);
+  }
+  .interp-cta a{
+    color:var(--gold);text-decoration:none;
+    border-bottom:1px solid rgba(244,185,66,.4);
+  }
+  .interp-cta a:hover{color:var(--orange);border-bottom-color:var(--orange);}
+  .interp-cta p{margin:0;}
+
   footer{
     text-align:center;margin-top:60px;color:rgba(255,107,157,.5);
     font-size:.72rem;letter-spacing:.35em;font-family:'Cinzel',serif;
@@ -511,6 +524,10 @@
   <div class="actions">
     <button class="btn" id="resetBtn" disabled>↺ Pull Again</button>
     <button class="btn" id="saveImgBtn" style="display:none;border-color:var(--gold);color:var(--gold)">⬇ Save Image</button>
+  </div>
+  <div class="interp-cta" id="interpCta">
+    <p>want a deeper interpretation?</p>
+    <p>save your image and email it to <a href="mailto:reading@heathermoon.media">reading@heathermoon.media</a></p>
   </div>
 
   <!-- Image preview panel -->
@@ -1197,6 +1214,7 @@ function showReading(){
   readingEl.classList.add('visible');
   resetBtn.disabled=false;
   document.getElementById('saveImgBtn').style.display='';
+  document.getElementById('interpCta').style.display='block';
   setTimeout(()=>{readingEl.scrollIntoView({behavior:'smooth',block:'start'});},400);
   setTimeout(showEmailCapture,1400);
 }
@@ -1210,7 +1228,7 @@ function reset(){
   readingEl.classList.remove('visible');
   interpsEl.innerHTML='';
   document.getElementById('saveImgBtn').style.display='none';
-  hideEmailCapture();
+  document.getElementById('interpCta').style.display='none';
   deckWrap.classList.remove('hidden');
   buildFan(); updateCounter();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1476,4 +1494,3 @@ document.getElementById('emailForm').addEventListener('submit',async()=>{
   }
 });
 </script>
-<script src="/email-form.js"></script>
